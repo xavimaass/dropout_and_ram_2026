@@ -1,27 +1,3 @@
-"""
-Finite ResNet (and Dropout Variant) in JAX.
-
-Forward pass equations:
-    Standard:
-        h(0, x)    = W_in @ x
-        h(ℓ, x)    = h(ℓ-1, x) + (1/LM) Σ_j f^h(z^{j,ℓ}, h(ℓ-1, x))
-        ŷ(x)       = (1/D) W_out.T @ h(L, x)
-
-    Dropout variant:
-        h^η(0, x)  = (1 + η_in)  ⊙  (W_in @ x)
-        h^η(ℓ, x)  = h^η(ℓ-1, x) + (1/LM) Σ_j f^h(z^{j,ℓ}, h^η(ℓ-1, x)) ⊙ (1 + η^{ℓ,j})
-        ŷ^η(x)     = (1/D) W_out.T @ ((1 + η_out) ⊙ h^η(L, x))
-
-Unit  f^h(z, h):
-    2-layer linear-unit (2LP):
-        φ((u, v), h) = v ⊙ ρ(u.T @ h),   z = (u, v),  u,v ∈ R^D
-    f^h(z, h) = diag(φ(z, h)) @ 1  ≡  φ(z, h)   (element-wise product with ones)
-
-Dropout mask (Bernoulli rescaling, unbiased):
-    η^{ℓ,j,d} = (1-q_ℓ)/q_ℓ  w.p. q_ℓ,   -1  w.p. 1-q_ℓ
-    E[1 + η] = 1  (unbiased),  Var[1+η] = (1-q)/q
-"""
-
 from typing import Callable, NamedTuple
 
 import jax
