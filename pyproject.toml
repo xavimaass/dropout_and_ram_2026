@@ -1,0 +1,19 @@
+[project]
+name = "dropout-and-ram_2026"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ipykernel>=7.2.0",
+    "jax>=0.9.2",
+    "jupyter>=1.1.1",
+    "marimo>=0.23.3",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.4",
+    "orbax-export>=0.0.8",
+    "pandas>=3.0.2",
+    "plotly>=6.6.0",
+    "pytest>=9.0.3",
+    "scikit-learn>=1.8.0",
+]
