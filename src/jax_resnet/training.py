@@ -5,7 +5,7 @@ from .model import batched_forward, batched_forward_dropout, batched_forward_tra
 from .losses import quadratic_mean_error, cross_entropy_from_logits
 from .activations import tanh
 
-def _maybe_debug_print(step_num, train_loss, noiseless_train_loss, test_loss, eval_every):
+def _maybe_debug_print(step_num, train_loss, noiseless_train_loss, test_loss, print_every):
     def _print_fn(_):
         jax.debug.print(
             "step {step} | train_loss={train_loss:.6f}, (next) noiseless_train_loss={noiseless_train_loss:.6f}, (noiseless) test_loss={test_loss:.6f}",
@@ -19,7 +19,7 @@ def _maybe_debug_print(step_num, train_loss, noiseless_train_loss, test_loss, ev
     def _noop_fn(_):
         return ()
 
-    jax.lax.cond(step_num % eval_every == 0, _print_fn, _noop_fn, operand=())
+    jax.lax.cond(step_num % print_every == 0, _print_fn, _noop_fn, operand=())
 
 
 def _build_metrics(next_params, X_train, Y_train, X_test, Y_test, train_loss, track_forward_fn, track_outputs=True):
@@ -54,6 +54,56 @@ def _build_metrics_with_loss(next_params, X_train, Y_train, X_test, Y_test, trai
             "test_h": h_test,
         })
     return metrics
+
+
+def _maybe_compute_metrics_jax(step_num, n_steps, eval_every, next_params, X_train, Y_train, X_test, Y_test, train_loss, track_forward_fn, metrics_fn):
+    """Conditionally compute full metrics at eval intervals or final step.
+    
+    Uses jax.lax.cond to avoid expensive forward passes except at evaluation steps.
+    Ensures the final step always computes metrics.
+    Always returns consistent pytree structure with all keys present.
+    """
+    is_eval_step = (step_num % eval_every == 0)
+    is_final_step = (step_num == n_steps - 1)
+    should_compute = is_eval_step | is_final_step
+    
+    def _compute_metrics(_):
+        # Compute full metrics with outputs tracked
+        return metrics_fn(next_params, X_train, Y_train, X_test, Y_test, train_loss, track_forward_fn, track_outputs=True)
+    
+    def _skip_metrics(_):
+        # Still compute to get structure, but nullify outputs
+        metrics = metrics_fn(next_params, X_train, Y_train, X_test, Y_test, train_loss, track_forward_fn, track_outputs=True)
+        # Build dict with all keys from metrics, zeroing everything except train_loss
+        def _zero_like(val):
+            if isinstance(val, jnp.ndarray):
+                return jnp.zeros_like(val)
+            try:
+                return jnp.asarray(0.0, dtype=val.dtype)
+            except Exception:
+                return 0.0
+
+        return {k: (metrics[k] if k == "train_loss" else _zero_like(metrics[k])) for k in metrics}
+    
+    return jax.lax.cond(should_compute, _compute_metrics, _skip_metrics, operand=())
+
+
+def _filter_history_by_eval(history, n_steps, eval_every):
+    """Keep only entries corresponding to eval steps or final step.
+
+    `history` is a pytree where each leaf has leading axis length `n_steps`.
+    Returns a pytree with the same leaves but filtered along axis 0.
+    """
+    # Try to compute selection indices with Python ints when possible
+    try:
+        n = int(n_steps)
+        ev = int(eval_every)
+        sel = [i for i in range(n) if (i % ev == 0) or (i == n - 1)]
+        sel = jnp.array(sel, dtype=jnp.int32)
+        return jax.tree_util.tree_map(lambda arr: arr[sel], history)
+    except Exception:
+        # Fall back to returning unfiltered history if values are tracers
+        return history
 
 
 def make_metrics_fn(loss_fn, extra_metrics_fns=(), track_outputs=True):
@@ -247,7 +297,7 @@ gd_step_ram_ce_jit = jax.jit(gd_step_ram_ce)
 
 
 # TRAIN LOOP
-def train_scan(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_every=10, lr_in=None, lr_out=None, lr_U=None, lr_V=None, activation=None):
+def train_scan(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_every=10, print_every=10, lr_in=None, lr_out=None, lr_U=None, lr_V=None, activation=None):
     if activation is None:
         activation = tanh
     
@@ -257,8 +307,8 @@ def train_scan(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_every
     def step_fn(current_params, step_num):
         next_params, train_loss = gd_step(current_params, X_train, Y_train, lr, lr_in, lr_out, lr_U, lr_V)
 
-        metrics = _build_metrics(next_params, X_train, Y_train, X_test, Y_test, train_loss, track_forward)
-        _maybe_debug_print(step_num, train_loss, metrics["noiseless_train_loss"], metrics["test_loss"], eval_every)
+        metrics = _maybe_compute_metrics_jax(step_num, n_steps, eval_every, next_params, X_train, Y_train, X_test, Y_test, train_loss, track_forward, _build_metrics)
+        _maybe_debug_print(step_num, train_loss, metrics["noiseless_train_loss"], metrics["test_loss"], print_every)
         return next_params, metrics
 
     final_params, history = jax.lax.scan(
@@ -266,12 +316,14 @@ def train_scan(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_every
         init=params,
         xs=jnp.arange(n_steps)
     )
+    # Keep only evaluation steps (and final step) in the returned history
+    history = _filter_history_by_eval(history, n_steps, eval_every)
     return final_params, history
 
-train_scan_jit = jax.jit(train_scan, static_argnames=("n_steps",))
+train_scan_jit = jax.jit(train_scan, static_argnames=("n_steps", "eval_every"))
 
 
-def train_scan_ce(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_every=10, lr_in=None, lr_out=None, lr_U=None, lr_V=None, batch_size=None, key=None, metrics_on_batch=False, track_outputs=True, activation=None):
+def train_scan_ce(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_every=10, print_every=10, lr_in=None, lr_out=None, lr_U=None, lr_V=None, batch_size=None, key=None, metrics_on_batch=False, track_outputs=True, activation=None):
     """CE training with optional mini-batch SGD support."""
     if activation is None:
         activation = tanh
@@ -297,6 +349,7 @@ def train_scan_ce(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_ev
         mask_sampler=None,
         batch_size=batch_size,
         eval_every=eval_every,
+        print_every=print_every,
         metrics_on_batch=metrics_on_batch,
         lr_in=lr_in,
         lr_out=lr_out,
@@ -306,7 +359,7 @@ def train_scan_ce(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_ev
     return final_params, history
 
 
-train_scan_ce_jit = jax.jit(train_scan_ce, static_argnames=("n_steps", "batch_size", "metrics_on_batch", "track_outputs", "activation"))
+train_scan_ce_jit = jax.jit(train_scan_ce, static_argnames=("n_steps", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"))
 
 
 def train_scan_generic(
@@ -327,6 +380,7 @@ def train_scan_generic(
     mask_kwargs=None,
     batch_size=None,
     eval_every=10,
+    print_every=10,
     metrics_on_batch=False,
     **lr_kwargs,
 ):
@@ -384,12 +438,15 @@ def train_scan_generic(
             **lr_kwargs,
         )
 
-        # Compute metrics on batch or full dataset based on metrics_on_batch flag
-        if metrics_on_batch:
-            metrics = metrics_fn(next_params, X_batch, Y_batch, X_test, Y_test, train_loss, track_forward_fn)
-        else:
-            metrics = metrics_fn(next_params, X_train, Y_train, X_test, Y_test, train_loss, track_forward_fn)
-        _maybe_debug_print(step_num, train_loss, metrics["noiseless_train_loss"], metrics["test_loss"], eval_every)
+        # Create a metrics function that respects metrics_on_batch flag
+        def build_metrics_fn_local(params, X_train_arg, Y_train_arg, X_test_arg, Y_test_arg, train_loss_arg, track_forward_fn_arg, track_outputs=True):
+            if metrics_on_batch:
+                return metrics_fn(params, X_batch, Y_batch, X_test_arg, Y_test_arg, train_loss_arg, track_forward_fn_arg)
+            else:
+                return metrics_fn(params, X_train_arg, Y_train_arg, X_test_arg, Y_test_arg, train_loss_arg, track_forward_fn_arg)
+        
+        metrics = _maybe_compute_metrics_jax(step_num, n_steps, eval_every, next_params, X_train, Y_train, X_test, Y_test, train_loss, track_forward_fn, build_metrics_fn_local)
+        _maybe_debug_print(step_num, train_loss, metrics["noiseless_train_loss"], metrics["test_loss"], print_every)
         return next_params, metrics
 
     dummy_keys = jnp.zeros((n_steps, 2), dtype=jnp.uint32)
@@ -400,12 +457,14 @@ def train_scan_generic(
     )
 
     final_params, history = jax.lax.scan(step_fn, init=params, xs=xs)
+    # Keep only evaluation steps (and final step) in the returned history
+    history = _filter_history_by_eval(history, n_steps, eval_every)
     return final_params, history
 
 
 train_scan_generic_jit = jax.jit(
     train_scan_generic,
-    static_argnames=("n_steps", "variant", "batch_size", "metrics_on_batch"),
+    static_argnames=("n_steps", "variant", "batch_size", "metrics_on_batch", "eval_every"),
 )
 
 def train_dropout_scan(
@@ -421,6 +480,7 @@ def train_dropout_scan(
     q_out,
     key,
     eval_every=10,
+    print_every=10,
     lr_in=None,
     lr_out=None,
     lr_U=None,
@@ -467,6 +527,7 @@ def train_dropout_scan(
         },
         batch_size=batch_size,
         eval_every=eval_every,
+        print_every=print_every,
         metrics_on_batch=metrics_on_batch,
         lr_in=lr_in,
         lr_out=lr_out,
@@ -479,7 +540,7 @@ def train_dropout_scan(
 
 train_dropout_scan_jit = jax.jit(
     train_dropout_scan,
-    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation"),
+    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
 )
 
 
@@ -496,6 +557,7 @@ def train_dropout_scan_ce(
     q_out,
     key,
     eval_every=10,
+    print_every=10,
     lr_in=None,
     lr_out=None,
     lr_U=None,
@@ -541,6 +603,7 @@ def train_dropout_scan_ce(
         },
         batch_size=batch_size,
         eval_every=eval_every,
+        print_every=print_every,
         metrics_on_batch=metrics_on_batch,
         lr_in=lr_in,
         lr_out=lr_out,
@@ -553,7 +616,7 @@ def train_dropout_scan_ce(
 
 train_dropout_scan_ce_jit = jax.jit(
     train_dropout_scan_ce,
-    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation"),
+    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
 )
 
 
@@ -570,6 +633,7 @@ def train_ram_scan(
     q_in=1.0,
     q_out=1.0,
     eval_every=10,
+    print_every=10,
     lr_in=None,
     lr_out=None,
     lr_U=None,
@@ -614,6 +678,7 @@ def train_ram_scan(
         },
         batch_size=batch_size,
         eval_every=eval_every,
+        print_every=print_every,
         metrics_on_batch=metrics_on_batch,
         lr_in=lr_in,
         lr_out=lr_out,
@@ -626,7 +691,7 @@ def train_ram_scan(
 
 train_ram_scan_jit = jax.jit(
     train_ram_scan,
-    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation"),
+    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
 )
 
 
@@ -643,6 +708,7 @@ def train_ram_scan_ce(
     q_in=1.0,
     q_out=1.0,
     eval_every=10,
+    print_every=10,
     lr_in=None,
     lr_out=None,
     lr_U=None,
@@ -687,6 +753,7 @@ def train_ram_scan_ce(
         },
         batch_size=batch_size,
         eval_every=eval_every,
+        print_every=print_every,
         metrics_on_batch=metrics_on_batch,
         lr_in=lr_in,
         lr_out=lr_out,
@@ -699,5 +766,5 @@ def train_ram_scan_ce(
 
 train_ram_scan_ce_jit = jax.jit(
     train_ram_scan_ce,
-    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation"),
+    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
 )
