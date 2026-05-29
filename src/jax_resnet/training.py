@@ -161,24 +161,24 @@ def _maybe_subsample(key, X, Y, batch_size):
     idx = jax.random.choice(key, n, shape=(batch_size,), replace=False)
     return X[idx], Y[idx]
 
-def mse_loss(params, X, Y):
+def mse_loss(params, X, Y, activation=tanh):
     """X: (B, n_in), Y: (B, n_out)"""
-    _, Y_hat = batched_forward(params, X)
+    _, Y_hat = batched_forward(params, X, activation=activation)
     return quadratic_mean_error(Y_hat, Y)
 
-def mse_loss_dropout(params, X, Y, mask):
-    _, Y_hat = batched_forward_dropout(params, X, mask)
+def mse_loss_dropout(params, X, Y, mask, activation=tanh):
+    _, Y_hat = batched_forward_dropout(params, X, mask, activation=activation)
     return quadratic_mean_error(Y_hat, Y)
 
 
-def cross_entropy_loss(params, X, Y):
+def cross_entropy_loss(params, X, Y, activation=tanh):
     """Cross entropy with model logits. X: (B, n_in), Y: (B,) or (B, n_classes)."""
-    _, logits = batched_forward(params, X)
+    _, logits = batched_forward(params, X, activation=activation)
     return cross_entropy_from_logits(logits, Y)
 
 
-def cross_entropy_loss_dropout(params, X, Y, mask):
-    _, logits = batched_forward_dropout(params, X, mask)
+def cross_entropy_loss_dropout(params, X, Y, mask, activation=tanh):
+    _, logits = batched_forward_dropout(params, X, mask, activation=activation)
     return cross_entropy_from_logits(logits, Y)
 
 
@@ -219,19 +219,34 @@ def apply_custom_sgd(params, grads, lr, lr_in=None, lr_out=None, lr_U=None, lr_V
     )
 
 
-def gd_step(current_params, X_train, Y_train, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None):
-    return gd_step_generic(current_params, X_train, Y_train, lr, mse_loss, mask=None, variant="standard", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
 
-def gd_step_dropout(current_params, X_train, Y_train, mask, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None):
-    return gd_step_generic(current_params, X_train, Y_train, lr, mse_loss_dropout, mask=mask, variant="dropout", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
-
-
-def gd_step_ce(current_params, X_train, Y_train, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None):
-    return gd_step_generic(current_params, X_train, Y_train, lr, cross_entropy_loss, mask=None, variant="standard", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
+def gd_step(current_params, X_train, Y_train, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None, activation=None):
+    if activation is None:
+        activation = tanh
+    loss_fn = lambda p, X, Y: mse_loss(p, X, Y, activation=activation)
+    return gd_step_generic(current_params, X_train, Y_train, lr, loss_fn, mask=None, variant="standard", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
 
 
-def gd_step_dropout_ce(current_params, X_train, Y_train, mask, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None):
-    return gd_step_generic(current_params, X_train, Y_train, lr, cross_entropy_loss_dropout, mask=mask, variant="dropout", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
+def gd_step_dropout(current_params, X_train, Y_train, mask, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None, activation=None):
+    if activation is None:
+        activation = tanh
+    # loss_fn signature expected: (params, X, Y, mask)
+    loss_fn = lambda p, X, Y, mask_arg: mse_loss_dropout(p, X, Y, mask_arg, activation=activation)
+    return gd_step_generic(current_params, X_train, Y_train, lr, loss_fn, mask=mask, variant="dropout", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
+
+
+def gd_step_ce(current_params, X_train, Y_train, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None, activation=None):
+    if activation is None:
+        activation = tanh
+    loss_fn = lambda p, X, Y: cross_entropy_loss(p, X, Y, activation=activation)
+    return gd_step_generic(current_params, X_train, Y_train, lr, loss_fn, mask=None, variant="standard", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
+
+
+def gd_step_dropout_ce(current_params, X_train, Y_train, mask, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None, activation=None):
+    if activation is None:
+        activation = tanh
+    loss_fn = lambda p, X, Y, mask_arg: cross_entropy_loss_dropout(p, X, Y, mask_arg, activation=activation)
+    return gd_step_generic(current_params, X_train, Y_train, lr, loss_fn, mask=mask, variant="dropout", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
 
 
 def _mask_ram_grads(grads, mask):
@@ -248,14 +263,20 @@ def _mask_ram_grads(grads, mask):
     )
 
 
-def gd_step_ram(current_params, X_train, Y_train, mask, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None):
+def gd_step_ram(current_params, X_train, Y_train, mask, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None, activation=None):
     """Gradient step with RaM masking; mask must be a dict from sample_dropout_mask."""
-    return gd_step_generic(current_params, X_train, Y_train, lr, mse_loss, mask=mask, variant="ram", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
+    if activation is None:
+        activation = tanh
+    loss_fn = lambda p, X, Y: mse_loss(p, X, Y, activation=activation)
+    return gd_step_generic(current_params, X_train, Y_train, lr, loss_fn, mask=mask, variant="ram", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
 
 
-def gd_step_ram_ce(current_params, X_train, Y_train, mask, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None):
+def gd_step_ram_ce(current_params, X_train, Y_train, mask, lr, lr_in=None, lr_out=None, lr_U=None, lr_V=None, activation=None):
     """Cross-entropy gradient step with RaM masking."""
-    return gd_step_generic(current_params, X_train, Y_train, lr, cross_entropy_loss, mask=mask, variant="ram", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
+    if activation is None:
+        activation = tanh
+    loss_fn = lambda p, X, Y: cross_entropy_loss(p, X, Y, activation=activation)
+    return gd_step_generic(current_params, X_train, Y_train, lr, loss_fn, mask=mask, variant="ram", lr_in=lr_in, lr_out=lr_out, lr_U=lr_U, lr_V=lr_V)
 
 
 # Generic GD STEP (unifies mse/ce, standard/dropout/ram)
@@ -305,7 +326,7 @@ def train_scan(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_every
         return batched_forward_track(current_params, X, activation)
 
     def step_fn(current_params, step_num):
-        next_params, train_loss = gd_step(current_params, X_train, Y_train, lr, lr_in, lr_out, lr_U, lr_V)
+        next_params, train_loss = gd_step(current_params, X_train, Y_train, lr, lr_in, lr_out, lr_U, lr_V, activation=activation)
 
         metrics = _maybe_compute_metrics_jax(step_num, n_steps, eval_every, next_params, X_train, Y_train, X_test, Y_test, train_loss, track_forward, _build_metrics)
         _maybe_debug_print(step_num, train_loss, metrics["noiseless_train_loss"], metrics["test_loss"], print_every)
@@ -341,7 +362,7 @@ def train_scan_ce(params, X_train, Y_train, X_test, Y_test, lr, n_steps, eval_ev
         Y_test,
         lr,
         n_steps,
-        loss_fn_params=cross_entropy_loss,
+        loss_fn_params=(lambda p, X, Y: cross_entropy_loss(p, X, Y, activation=activation)),
         metrics_fn=metrics_fn,
         track_forward_fn=track_forward_with_activation,
         variant="standard",
@@ -514,7 +535,7 @@ def train_dropout_scan(
         Y_test,
         lr,
         n_steps,
-        loss_fn_params=mse_loss_dropout,
+        loss_fn_params=(lambda p, X, Y, mask: mse_loss_dropout(p, X, Y, mask, activation=activation)),
         metrics_fn=metrics_fn,
         track_forward_fn=track_forward,
         variant="dropout",
@@ -590,7 +611,7 @@ def train_dropout_scan_ce(
         Y_test,
         lr,
         n_steps,
-        loss_fn_params=cross_entropy_loss_dropout,
+        loss_fn_params=(lambda p, X, Y, mask: cross_entropy_loss_dropout(p, X, Y, mask, activation=activation)),
         metrics_fn=metrics_fn,
         track_forward_fn=track_forward,
         variant="dropout",
@@ -665,7 +686,7 @@ def train_ram_scan(
         Y_test,
         lr,
         n_steps,
-        loss_fn_params=mse_loss,
+        loss_fn_params=(lambda p, X, Y: mse_loss(p, X, Y, activation=activation)),
         metrics_fn=metrics_fn,
         track_forward_fn=track_forward_with_activation,
         variant="ram",
@@ -740,7 +761,7 @@ def train_ram_scan_ce(
         Y_test,
         lr,
         n_steps,
-        loss_fn_params=cross_entropy_loss,
+        loss_fn_params=(lambda p, X, Y: cross_entropy_loss(p, X, Y, activation=activation)),
         metrics_fn=metrics_fn,
         track_forward_fn=track_forward_with_activation,
         variant="ram",
