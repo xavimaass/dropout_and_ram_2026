@@ -64,7 +64,13 @@ def save_results(final_params_gd, histories_gd, final_params_do, histories_do, f
 
 def main():
 
-    SHAPES = [(10,20,20), (10,40,40)]
+    SHAPES = [
+        (10,20,20),
+        (10,40,40),
+        (10,80,80),
+        (10,160,160),
+        (10,320,320),
+        ]
 
     for D,L,M in SHAPES:
         print(f"Running experiment with D={D}, L={L}, M={M}")
