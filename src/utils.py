@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.datasets import fetch_openml
 from sklearn.model_selection import train_test_split
 
-from src.jax_resnet.model import FiniteResNetParams
+from src.jax_resnet.model import FiniteResNetParams, batched_forward_track
 
 def make_dataset_mnist(N=None, seed=42, digits=None):
     mnist = fetch_openml('mnist_784', version=1, as_frame=False)
@@ -43,3 +43,18 @@ def align_tracked_particle_across_layers(params, particle_idx=-1) -> FiniteResNe
         U_new = params.U.at[:, particle_idx, :].set(jnp.broadcast_to(u_ref, params.U[:, particle_idx, :].shape))
         V_new = params.V.at[:, particle_idx, :].set(jnp.broadcast_to(v_ref, params.V[:, particle_idx, :].shape))
         return FiniteResNetParams(W_in=params.W_in, W_out=params.W_out, U=U_new, V=V_new)
+
+
+def compute_train_h_out(params, X_test, activation):
+    th, ty = batched_forward_track(params, X_test, activation=activation)
+    return th, ty
+
+
+def add_train_h_out(params_dict, history_dict, X_test, activation):
+    new_dict = history_dict.copy()
+    for variant in params_dict.keys():
+        for j in range(len(params_dict[variant])):
+            th, ty = compute_train_h_out(params_dict[variant][j], X_test, activation)
+            new_dict[variant][j]["test_h"] = th
+            new_dict[variant][j]["test_output"] = ty
+    return new_dict
