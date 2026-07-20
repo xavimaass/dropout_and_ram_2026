@@ -9,5 +9,7 @@ uv sync
 
 The folder `src` contains the source code for the ResNet implementation. 
 The code for reproducing the result is organized in the following jupyter notebooks:
-- `paper_experiments_mnist.ipynb` contains the code for running the training dynamics of SGD-vanilla, SGD-Dropout and SGD-RaM on the MNIST dataset; and to save the results of the run.
-- `plots_from_single_run.ipynb` and `plots_from_multi_run.ipynb` contain the code for loading the obtained results and generating the figures displayed in the article.
+- `exp_config.py` contains all the parameters for the experiment to be run.
+- `main.py` contains the code for running the training dynamics of SGD-vanilla, SGD-Dropout and SGD-RaM on the MNIST dataset (for different configurations of (D, M, L)); and to save the results of the run.
+- `plots_from_multi_runs.ipynb` contains the code for creating a dataframe of "results" from the saved checkpoints of a training run.
+- `plot_params_single_run.ipynb`, `plot_test_loss_single_run.ipynb` and `plots_from_multi_runs_load.ipynb` contain the code for loading the obtained results and generating the figures displayed in the article.
