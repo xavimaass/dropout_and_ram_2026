@@ -1,9 +1,9 @@
 from src.utils import make_dataset_mnist
-from src.jax_resnet.model import relu
+from src.jax_resnet.model import relu, tanh
 # SETTING
 d_in, d_out, seed = 784, 2, 42
 #N=10_000 # subsample of MNIST to use in the experiment (this affects the training time since we track the loss on the full test set over training iterations).
-N=1_000
+N=10_000
 X_train, Y_train, X_test, Y_test = make_dataset_mnist(N=N, seed=seed, digits=[4,7])
 print(X_train.shape, Y_train.shape, X_test.shape, Y_test.shape)
 
@@ -14,8 +14,8 @@ lr_in, lr_out = 0.0, 0.0
 q = 0.5
 batch_size = 64
 last_particle_single_source = True #Is the mask also shared in depth for the last particle?
-eval_every = 5
-ACTIVATION = relu
+eval_every = 1
+ACTIVATION = tanh #relu
 num_repetitions = 5
 LOOP_SEED = 48
 
