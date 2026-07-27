@@ -2,7 +2,7 @@ from src.utils import make_dataset_cifar10
 from src.jax_resnet.model import tanh
 
 d_in, d_out, seed = 3072, 10, 42
-N = 1_000
+N = None
 classes = None          # set to e.g. [0, 1] for a 2-class subset experiment
 X_train, Y_train, X_test, Y_test = make_dataset_cifar10(N=N, seed=seed, classes=classes)
 print(X_train.shape, Y_train.shape, X_test.shape, Y_test.shape)
