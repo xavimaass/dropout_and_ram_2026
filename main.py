@@ -73,8 +73,8 @@ def save_results(final_params_gd, histories_gd, final_params_do, histories_do,
 def main():
 
     SHAPES = [
-        (10,4,4),
-        (10,4,8),
+        # (10,4,4),
+        # (10,4,8),
         # (10,4,16),
         # (10,4,32),
         # (10,4,64),
@@ -113,7 +113,7 @@ def main():
         # (10,64,8),
         # (10,64,16),
         # (10,64,32),
-        # (10,64,64),
+        (50,64,64),
         # (10,64,128),
         # (10,64,256),
         # (10,64,512),
@@ -171,8 +171,8 @@ def main():
             "stochastic_depth",
             "single_source_M",
         ]
-        #loop_seed = LOOP_SEED + 9*(M.bit_length()-1-2) + (L.bit_length()-1-2) # NOT coupled across M and L realizations (does not change much)
-        loop_seed = LOOP_SEED
+        loop_seed = LOOP_SEED + 9*(M.bit_length()-1-2) + (L.bit_length()-1-2) # NOT coupled across M and L realizations (does not change much)
+        #loop_seed = LOOP_SEED
         print("Running GD")
         final_params_gd, histories_gd = loop_experiment(num_repetitions, loop_seed, train_scan_ce_jit, params0, general_kwargs, ["gd"], dropout=False)
         print("Running Dropout")
