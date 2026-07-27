@@ -7,12 +7,24 @@ from src.jax_resnet.model import init_params
 from src.jax_resnet.training import train_scan_ce_jit, train_dropout_scan_ce_jit, train_ram_scan_ce_jit
 from src.utils import align_tracked_particle_across_layers
 
-from exp_config import (
+DATASET = "cifar10"  # or "cifar10"
+
+if DATASET == "mnist":
+    from mnist_config import (
+        d_in, d_out, seed, N, X_train, Y_train, X_test, Y_test, 
+        tau, n_steps, lr_in, lr_out, q, batch_size, 
+        last_particle_single_source, eval_every, ACTIVATION, num_repetitions, LOOP_SEED,
+        BASE_SETTING_STR
+        )
+elif DATASET == "cifar10":
+    from cifar10_config import (
     d_in, d_out, seed, N, X_train, Y_train, X_test, Y_test, 
     tau, n_steps, lr_in, lr_out, q, batch_size, 
     last_particle_single_source, eval_every, ACTIVATION, num_repetitions, LOOP_SEED,
     BASE_SETTING_STR
     )
+else:
+    raise ValueError(f"Unknown dataset: {DATASET}")
 
 def loop_experiment(num_repetitions, loop_seed, train_fn, params0, kwargs, variants, dropout = True):
     final_params = {}
@@ -42,24 +54,20 @@ def loop_experiment(num_repetitions, loop_seed, train_fn, params0, kwargs, varia
         histories[variant] = histories_repeats
     return final_params, histories
 
-def save_results(final_params_gd, histories_gd, final_params_do, histories_do, final_params_ram, histories_ram, setting_str):
-    # Export (serialize) to pickle
-    with open(f'data/mnist/final_params_gd_{setting_str}.pkl', 'wb') as f:   # 'wb' = write binary
+def save_results(final_params_gd, histories_gd, final_params_do, histories_do,
+                 final_params_ram, histories_ram, setting_str, data_dir):
+    #os.makedirs(data_dir, exist_ok=True)
+    with open(f'data/{data_dir}/final_params_gd_{setting_str}.pkl', 'wb') as f:
         pickle.dump(final_params_gd, f)
-
-    with open(f'data/mnist/histories_gd_{setting_str}.pkl', 'wb') as f:   # 'wb' = write binary
+    with open(f'data/{data_dir}/histories_gd_{setting_str}.pkl', 'wb') as f:
         pickle.dump(histories_gd, f)
-
-    with open(f'data/mnist/final_params_do_{setting_str}.pkl', 'wb') as f:   # 'wb' = write binary
+    with open(f'data/{data_dir}/final_params_do_{setting_str}.pkl', 'wb') as f:
         pickle.dump(final_params_do, f)
-
-    with open(f'data/mnist/histories_do_{setting_str}.pkl', 'wb') as f:   # 'wb' = write binary
+    with open(f'data/{data_dir}/histories_do_{setting_str}.pkl', 'wb') as f:
         pickle.dump(histories_do, f)
-
-    with open(f'data/mnist/final_params_ram_{setting_str}.pkl', 'wb') as f:   # 'wb' = write binary
+    with open(f'data/{data_dir}/final_params_ram_{setting_str}.pkl', 'wb') as f:
         pickle.dump(final_params_ram, f)
-
-    with open(f'data/mnist/histories_ram_{setting_str}.pkl', 'wb') as f:   # 'wb' = write binary
+    with open(f'data/{data_dir}/histories_ram_{setting_str}.pkl', 'wb') as f:
         pickle.dump(histories_ram, f)
 
 def main():
@@ -67,85 +75,85 @@ def main():
     SHAPES = [
         (10,4,4),
         (10,4,8),
-        (10,4,16),
-        (10,4,32),
-        (10,4,64),
-        (10,4,128),
-        (10,4,256),
-        (10,4,512),
-        (10,4,1024),
-        (10,8,4),
-        (10,8,8),
-        (10,8,16),
-        (10,8,32),
-        (10,8,64),
-        (10,8,128),
-        (10,8,256),
-        (10,8,512),
-        (10,8,1024),
-        (10,16,4),
-        (10,16,8),
-        (10,16,16),
-        (10,16,32),
-        (10,16,64),
-        (10,16,128),
-        (10,16,256),
-        (10,16,512),
-        (10,16,1024),
-        (10,32,4),
-        (10,32,8),
-        (10,32,16),
-        (10,32,32),
-        (10,32,64),
-        (10,32,128),
-        (10,32,256),
-        (10,32,512),
-        (10,32,1024),
-        (10,64,4),
-        (10,64,8),
-        (10,64,16),
-        (10,64,32),
-        (10,64,64),
-        (10,64,128),
-        (10,64,256),
-        (10,64,512),
-        (10,64,1024),
-        (10,128,4),
-        (10,128,8),
-        (10,128,16),
-        (10,128,32),
-        (10,128,64),
-        (10,128,128),
-        (10,128,256),
-        (10,128,512),
-        (10,128,1024),
-        (10,256,4),
-        (10,256,8),
-        (10,256,16),
-        (10,256,32),
-        (10,256,64),
-        (10,256,128),
-        (10,256,256),
-        (10,256,512),
-        (10,256,1024),
-        (10,512,4),
-        (10,512,8),
-        (10,512,16),
-        (10,512,32),
-        (10,512,64),
-        (10,512,128),
-        (10,512,256),
-        (10,512,512),
-        (10,512,1024),
-        (10,1024,4),
-        (10,1024,8),
-        (10,1024,16),
-        (10,1024,32),
-        (10,1024,64),
-        (10,1024,128),
-        (10,1024,256),
-        (10,1024,512),
-        (10,1024,1024),
+        # (10,4,16),
+        # (10,4,32),
+        # (10,4,64),
+        # (10,4,128),
+        # (10,4,256),
+        # (10,4,512),
+        # (10,4,1024),
+        # (10,8,4),
+        # (10,8,8),
+        # (10,8,16),
+        # (10,8,32),
+        # (10,8,64),
+        # (10,8,128),
+        # (10,8,256),
+        # (10,8,512),
+        # (10,8,1024),
+        # (10,16,4),
+        # (10,16,8),
+        # (10,16,16),
+        # (10,16,32),
+        # (10,16,64),
+        # (10,16,128),
+        # (10,16,256),
+        # (10,16,512),
+        # (10,16,1024),
+        # (10,32,4),
+        # (10,32,8),
+        # (10,32,16),
+        # (10,32,32),
+        # (10,32,64),
+        # (10,32,128),
+        # (10,32,256),
+        # (10,32,512),
+        # (10,32,1024),
+        # (10,64,4),
+        # (10,64,8),
+        # (10,64,16),
+        # (10,64,32),
+        # (10,64,64),
+        # (10,64,128),
+        # (10,64,256),
+        # (10,64,512),
+        # (10,64,1024),
+        # (10,128,4),
+        # (10,128,8),
+        # (10,128,16),
+        # (10,128,32),
+        # (10,128,64),
+        # (10,128,128),
+        # (10,128,256),
+        # (10,128,512),
+        # (10,128,1024),
+        # (10,256,4),
+        # (10,256,8),
+        # (10,256,16),
+        # (10,256,32),
+        # (10,256,64),
+        # (10,256,128),
+        # (10,256,256),
+        # (10,256,512),
+        # (10,256,1024),
+        # (10,512,4),
+        # (10,512,8),
+        # (10,512,16),
+        # (10,512,32),
+        # (10,512,64),
+        # (10,512,128),
+        # (10,512,256),
+        # (10,512,512),
+        # (10,512,1024),
+        # (10,1024,4),
+        # (10,1024,8),
+        # (10,1024,16),
+        # (10,1024,32),
+        # (10,1024,64),
+        # (10,1024,128),
+        # (10,1024,256),
+        # (10,1024,512),
+        # (10,1024,1024),
         ]
 
     for D,L,M in SHAPES:
@@ -174,7 +182,12 @@ def main():
 
         ### Save results from this run
         setting_str = f'L{L}_M{M}_D{D}' + BASE_SETTING_STR
-        save_results(final_params_gd, histories_gd, final_params_do, histories_do, final_params_ram, histories_ram, setting_str)
+        save_results(
+            final_params_gd, histories_gd, 
+            final_params_do, histories_do, 
+            final_params_ram, histories_ram, 
+            setting_str, data_dir=DATASET
+            )
 
 if __name__ == "__main__":
     main()        
