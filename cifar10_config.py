@@ -8,8 +8,8 @@ X_train, Y_train, X_test, Y_test = make_dataset_cifar10(N=N, seed=seed, classes=
 print(X_train.shape, Y_train.shape, X_test.shape, Y_test.shape)
 
 tau = 0.4
-n_steps = 50
-lr_in, lr_out = 0.1/d_in, 0.1*d_out # 0.1/d_in, 0.1*d_out
+n_steps = 50 #1_000 #50
+lr_in, lr_out = 0.0, 0.0 #0.8/d_in, 0.5*d_out # 0.1/d_in, 0.1*d_out
 q = 0.5
 batch_size = 64
 last_particle_single_source = True
