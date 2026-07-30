@@ -3,7 +3,7 @@ from src.jax_resnet.model import relu, tanh
 # SETTING
 d_in, d_out, seed = 784, 2, 42
 #N=10_000 # subsample of MNIST to use in the experiment (this affects the training time since we track the loss on the full test set over training iterations).
-N=10_000
+N=1_000
 X_train, Y_train, X_test, Y_test = make_dataset_mnist(N=N, seed=seed, digits=[4,7])
 print(X_train.shape, Y_train.shape, X_test.shape, Y_test.shape)
 

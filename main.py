@@ -7,7 +7,8 @@ from src.jax_resnet.model import init_params
 from src.jax_resnet.training import train_scan_ce_jit, train_dropout_scan_ce_jit, train_ram_scan_ce_jit
 from src.utils import align_tracked_particle_across_layers
 
-DATASET = "cifar10"  # or "cifar10"
+DATASET = "mnist"  # or "cifar10"
+mask_distribution = "centered_gaussian" #"rescaled_bernoulli" # Distribution for sampling the dropout mask. Options: "rescaled_bernoulli", "centered_gaussian"
 
 if DATASET == "mnist":
     from mnist_config import (
@@ -186,7 +187,7 @@ def main():
             final_params_gd, histories_gd, 
             final_params_do, histories_do, 
             final_params_ram, histories_ram, 
-            setting_str, data_dir=DATASET
+            setting_str, data_dir=f"{DATASET}/{mask_distribution}"
             )
 
 if __name__ == "__main__":
