@@ -9,7 +9,7 @@ print(X_train.shape, Y_train.shape, X_test.shape, Y_test.shape)
 
 # Model parameters
 tau = 0.4
-n_steps = 200
+n_steps = 50 #200
 lr_in, lr_out = 0.0, 0.0
 q = 0.5
 batch_size = 64
