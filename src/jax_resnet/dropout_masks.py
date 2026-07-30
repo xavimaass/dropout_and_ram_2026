@@ -39,6 +39,11 @@ InternalDropoutVariant = Literal[
     "single_source_full",
 ]
 
+MaskDistribution = Literal[
+    "rescaled_bernoulli",
+    "centered_gaussian",
+]
+
 
 def _normalize_q_layers(q_layers: Array, L: int) -> Array:
     q_layers = jnp.asarray(q_layers)
@@ -58,6 +63,12 @@ def _sample_rescaled_mask(key: PRNGKey, q: Array | float, shape: tuple[int, ...]
     b = random.bernoulli(key, p=q_arr, shape=shape).astype(jnp.float32)
     return jnp.where(b, (1.0 - q_arr) / q_arr, -1.0)
 
+def _sample_gaussian_mask(key: PRNGKey, q: Array | float, shape: tuple[int, ...]) -> Array:
+    """Sample a centered Gaussian mask with variance (1 - q) / q."""
+    q_arr = jnp.asarray(q, dtype=jnp.float32)
+    std = jnp.sqrt((1.0 - q_arr) / q_arr)
+    z = random.normal(key, shape=shape, dtype=jnp.float32)
+    return std * z
 
 # Map variants to their base shape configuration (base_m, base_d)
 # None means full dimension, 1 means shared across that dimension
@@ -94,16 +105,26 @@ def _sample_internal_dropout_mask_single_source_shared(
     D: int,
     q_layers: Array,
     sample_shape: tuple[int, int],
+    mask_distribution: MaskDistribution = "rescaled_bernoulli",
 ) -> Array:
     """Sample single_source mask with shared uniform across layers.
     
     Samples once from a uniform matrix and reuses it across all layers,
     applying layer-specific thresholds via q_layers.
     """
-    u = random.uniform(key, shape=sample_shape, dtype=jnp.float32)
-    u_broadcast = jnp.broadcast_to(u, (M, D))
-    q = q_layers.astype(jnp.float32)[:, None, None]
-    return jnp.where(u_broadcast[None, :, :] <= q, (1.0 - q) / q, -1.0)
+    if mask_distribution == "rescaled_bernoulli":
+        u = random.uniform(key, shape=sample_shape, dtype=jnp.float32)
+        u_broadcast = jnp.broadcast_to(u, (M, D))
+        q = q_layers.astype(jnp.float32)[:, None, None]
+        return jnp.where(u_broadcast[None, :, :] <= q, (1.0 - q) / q, -1.0)
+    elif mask_distribution == "centered_gaussian":
+        z = random.normal(key, shape=sample_shape, dtype=jnp.float32)
+        z_broadcast = jnp.broadcast_to(z, (M, D))
+        q = q_layers.astype(jnp.float32)[:, None, None]
+        std = jnp.sqrt((1.0 - q) / q)
+        return std * z_broadcast[None, :, :]
+    else:
+        raise ValueError(f"Unsupported mask_distribution: {mask_distribution}")
 
 
 def sample_internal_dropout_mask(
@@ -114,6 +135,7 @@ def sample_internal_dropout_mask(
     q_layers: Array,
     variant: InternalDropoutVariant = "elementwise",
     single_source_last_particle: bool = False,
+    mask_distribution: MaskDistribution = "rescaled_bernoulli",
 ) -> Array:
     """Sample the internal LMD dropout mask with a chosen structural variant.
 
@@ -132,6 +154,8 @@ def sample_internal_dropout_mask(
         the last particle to use the single-source equivalent implied by
         ``variant``. This avoids adding separate enum variants for the
         mixed-sampling regime.
+    mask_distribution:
+        Distribution for sampling the dropout mask.
 
     Returns
     -------
@@ -157,6 +181,7 @@ def sample_internal_dropout_mask(
                 q_layers,
                 variant=variant,
                 single_source_last_particle=False,
+                mask_distribution=mask_distribution,
             )
 
         tail_variant = _single_source_tail_variant(variant)
@@ -168,6 +193,7 @@ def sample_internal_dropout_mask(
             q_layers,
             variant=tail_variant,
             single_source_last_particle=False,
+            mask_distribution=mask_distribution,
         )
         return jnp.concatenate([eta_head, eta_tail], axis=1)
 
@@ -179,12 +205,20 @@ def sample_internal_dropout_mask(
 
     # For single_source variants, sample once and reuse across layers
     if variant.startswith("single_source"):
-        return _sample_internal_dropout_mask_single_source_shared(key, L, M, D, q_layers, sample_shape)
+        return _sample_internal_dropout_mask_single_source_shared(
+            key, L, M, D, q_layers, sample_shape, 
+            mask_distribution=mask_distribution
+            )
 
     # For other variants, sample independently per layer
     def sample_layer(layer_idx: Array) -> Array:
         layer_key = random.fold_in(key, layer_idx)
-        eta_l = _sample_rescaled_mask(layer_key, q_layers[layer_idx], sample_shape)
+        if mask_distribution == "rescaled_bernoulli":
+            eta_l = _sample_rescaled_mask(layer_key, q_layers[layer_idx], sample_shape)
+        elif mask_distribution == "centered_gaussian":
+            eta_l = _sample_gaussian_mask(layer_key, q_layers[layer_idx], sample_shape)
+        else:
+            raise ValueError(f"Unsupported mask_distribution: {mask_distribution}")
         return jnp.broadcast_to(eta_l, (M, D))
 
     return jax.vmap(sample_layer)(jnp.arange(L))
@@ -200,6 +234,7 @@ def sample_dropout_mask(
     q_out: float,
     internal_variant: InternalDropoutVariant = "elementwise",
     single_source_last_particle: bool = False,
+    mask_distribution: MaskDistribution = "rescaled_bernoulli",
 ) -> dict[str, Array]:
     """Sample the full dropout mask dict used by the JAX ResNet model."""
     k1, k2, k3 = random.split(key, 3)
@@ -211,9 +246,17 @@ def sample_dropout_mask(
         q_layers,
         internal_variant,
         single_source_last_particle=single_source_last_particle,
+        mask_distribution=mask_distribution,
     )
-    eta_in = _sample_rescaled_mask(k2, q_in, (D,))
-    eta_out = _sample_rescaled_mask(k3, q_out, (D,))
+
+    if mask_distribution == "rescaled_bernoulli":
+        eta_in = _sample_rescaled_mask(k2, q_in, (D,))
+        eta_out = _sample_rescaled_mask(k3, q_out, (D,))
+    elif mask_distribution == "centered_gaussian":
+        eta_in = _sample_gaussian_mask(k2, q_in, (D,))
+        eta_out = _sample_gaussian_mask(k3, q_out, (D,))
+    else:
+        raise ValueError(f"Unsupported mask_distribution: {mask_distribution}")
     return {"eta_lmd": eta_lmd, "eta_in": eta_in, "eta_out": eta_out}
 
 
