@@ -508,6 +508,7 @@ def train_dropout_scan(
     lr_V=None,
     internal_dropout_variant="elementwise",
     single_source_last_particle=False,
+    mask_distribution="rescaled_bernoulli",
     batch_size=None,
     metrics_on_batch=False,
     track_outputs=True,
@@ -545,6 +546,7 @@ def train_dropout_scan(
         mask_kwargs={
             "internal_variant": internal_dropout_variant,
             "single_source_last_particle": single_source_last_particle,
+            "mask_distribution": mask_distribution,
         },
         batch_size=batch_size,
         eval_every=eval_every,
@@ -561,7 +563,7 @@ def train_dropout_scan(
 
 train_dropout_scan_jit = jax.jit(
     train_dropout_scan,
-    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
+    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "mask_distribution", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
 )
 
 
@@ -585,6 +587,7 @@ def train_dropout_scan_ce(
     lr_V=None,
     internal_dropout_variant="elementwise",
     single_source_last_particle=False,
+    mask_distribution="rescaled_bernoulli",
     batch_size=None,
     metrics_on_batch=False,
     track_outputs=True,
@@ -621,6 +624,7 @@ def train_dropout_scan_ce(
         mask_kwargs={
             "internal_variant": internal_dropout_variant,
             "single_source_last_particle": single_source_last_particle,
+            "mask_distribution": mask_distribution,
         },
         batch_size=batch_size,
         eval_every=eval_every,
@@ -637,7 +641,7 @@ def train_dropout_scan_ce(
 
 train_dropout_scan_ce_jit = jax.jit(
     train_dropout_scan_ce,
-    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
+    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "mask_distribution", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
 )
 
 
@@ -661,6 +665,7 @@ def train_ram_scan(
     lr_V=None,
     internal_dropout_variant="elementwise",
     single_source_last_particle=False,
+    mask_distribution="rescaled_bernoulli",
     batch_size=None,
     metrics_on_batch=False,
     track_outputs=True,
@@ -696,6 +701,7 @@ def train_ram_scan(
         mask_kwargs={
             "internal_variant": internal_dropout_variant,
             "single_source_last_particle": single_source_last_particle,
+            "mask_distribution": mask_distribution,
         },
         batch_size=batch_size,
         eval_every=eval_every,
@@ -712,7 +718,7 @@ def train_ram_scan(
 
 train_ram_scan_jit = jax.jit(
     train_ram_scan,
-    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
+    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "mask_distribution", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
 )
 
 
@@ -736,6 +742,7 @@ def train_ram_scan_ce(
     lr_V=None,
     internal_dropout_variant="elementwise",
     single_source_last_particle=False,
+    mask_distribution="rescaled_bernoulli",
     batch_size=None,
     metrics_on_batch=False,
     track_outputs=True,
@@ -771,6 +778,7 @@ def train_ram_scan_ce(
         mask_kwargs={
             "internal_variant": internal_dropout_variant,
             "single_source_last_particle": single_source_last_particle,
+            "mask_distribution": mask_distribution,
         },
         batch_size=batch_size,
         eval_every=eval_every,
@@ -787,5 +795,5 @@ def train_ram_scan_ce(
 
 train_ram_scan_ce_jit = jax.jit(
     train_ram_scan_ce,
-    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
+    static_argnames=("n_steps", "internal_dropout_variant", "single_source_last_particle", "mask_distribution", "batch_size", "metrics_on_batch", "track_outputs", "activation", "eval_every"),
 )
