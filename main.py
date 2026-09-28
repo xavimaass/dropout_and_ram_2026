@@ -1,3 +1,4 @@
+import gc
 import pickle
 import jax
 import jax.numpy as jnp
@@ -55,113 +56,109 @@ def loop_experiment(num_repetitions, loop_seed, train_fn, params0, kwargs, varia
         histories[variant] = histories_repeats
     return final_params, histories
 
-def save_results(final_params_gd, histories_gd, final_params_do, histories_do,
-                 final_params_ram, histories_ram, setting_str, data_dir):
-    #os.makedirs(data_dir, exist_ok=True)
-    with open(f'data/{data_dir}/final_params_gd_{setting_str}.pkl', 'wb') as f:
-        pickle.dump(final_params_gd, f)
-    with open(f'data/{data_dir}/histories_gd_{setting_str}.pkl', 'wb') as f:
-        pickle.dump(histories_gd, f)
-    with open(f'data/{data_dir}/final_params_do_{setting_str}.pkl', 'wb') as f:
-        pickle.dump(final_params_do, f)
-    with open(f'data/{data_dir}/histories_do_{setting_str}.pkl', 'wb') as f:
-        pickle.dump(histories_do, f)
-    with open(f'data/{data_dir}/final_params_ram_{setting_str}.pkl', 'wb') as f:
-        pickle.dump(final_params_ram, f)
-    with open(f'data/{data_dir}/histories_ram_{setting_str}.pkl', 'wb') as f:
-        pickle.dump(histories_ram, f)
+def save_results(final_params, histories, label, setting_str, data_dir):
+    """Save results for a single phase and free the backing memory."""
+    with open(f'data/{data_dir}/final_params_{label}_{setting_str}.pkl', 'wb') as f:
+        pickle.dump(final_params, f)
+    with open(f'data/{data_dir}/histories_{label}_{setting_str}.pkl', 'wb') as f:
+        pickle.dump(histories, f)
+    del final_params, histories
+    gc.collect()
+    jax.clear_caches()
 
 def main():
-    D = 10 if DATASET == "mnist" else 50
+    #D = 10 if DATASET == "mnist" else 50
+    D = 10 if DATASET == "mnist" else 32
+    print(f"D={D}")
     SHAPES = [
-        # # (D,4,4),
-        # # (D,4,8),
-        # # (D,4,16),
-        # # (D,4,32),
-        # # (D,4,64),
-        # # (D,4,128),
-        # # (D,4,256),
-        # # (D,4,512),
-        # # (D,4,1024),
-        # # (D,8,4),
-        # (D,8,8),
-        # (D,8,16),
-        # (D,8,32),
-        # (D,8,64),
-        # (D,8,128),
-        # (D,8,256),
-        # (D,8,512),
-        # # (D,8,1024),
-        # # (D,16,4),
-        # (D,16,8),
-        # (D,16,16),
-        # (D,16,32),
-        # (D,16,64),
-        # (D,16,128),
-        # (D,16,256),
-        # (D,16,512),
-        # # (D,16,1024),
-        # # (D,32,4),
-        # (D,32,8),
-        # (D,32,16),
-        # (D,32,32),
-        # (D,32,64),
-        # (D,32,128),
-        # (D,32,256),
-        # (D,32,512),
-        # # (D,32,1024),
-        # # (D,64,4),
-        # (D,64,8),
-        # (D,64,16),
-        # (D,64,32),
-        # (D,64,64),
-        # (D,64,128),
-        # (D,64,256),
-        # (D,64,512),
-        # # (D,64,1024),
-        # # (D,128,4),
-        # (D,128,8),
-        # (D,128,16),
-        # (D,128,32),
-        # (D,128,64),
-        # (D,128,128),
-        # (D,128,256),
-        # (D,128,512),
-        # # (D,128,1024),
-        # # (D,256,4),
-        # (D,256,8),
-        # (D,256,16),
-        # (D,256,32),
-        # (D,256,64),
-        # (D,256,128),
-        # (D,256,256),
-        # (D,256,512),
-        # # (D,256,1024),
-        # # (D,512,4),
-        # (D,512,8),
-        # (D,512,16),
-        # (D,512,32),
-        # (D,512,64),
-        # (D,512,128),
+        (D,4,4),
+        (D,4,8),
+        (D,4,16),
+        (D,4,32),
+        (D,4,64),
+        (D,4,128),
+        (D,4,256),
+        (D,4,512),
+        (D,4,1024),
+        (D,8,4),
+        (D,8,8),
+        (D,8,16),
+        (D,8,32),
+        (D,8,64),
+        (D,8,128),
+        (D,8,256),
+        (D,8,512),
+        (D,8,1024),
+        (D,16,4),
+        (D,16,8),
+        (D,16,16),
+        (D,16,32),
+        (D,16,64),
+        (D,16,128),
+        (D,16,256),
+        (D,16,512),
+        (D,16,1024),
+        (D,32,4),
+        (D,32,8),
+        (D,32,16),
+        (D,32,32),
+        (D,32,64),
+        (D,32,128),
+        (D,32,256),
+        (D,32,512),
+        (D,32,1024),
+        (D,64,4),
+        (D,64,8),
+        (D,64,16),
+        (D,64,32),
+        (D,64,64),
+        (D,64,128),
+        (D,64,256),
+        (D,64,512),
+        (D,64,1024),
+        (D,128,4),
+        (D,128,8),
+        (D,128,16),
+        (D,128,32),
+        (D,128,64),
+        (D,128,128),
+        (D,128,256),
+        (D,128,512),
+        (D,128,1024),
+        (D,256,4),
+        (D,256,8),
+        (D,256,16),
+        (D,256,32),
+        (D,256,64),
+        (D,256,128),
+        (D,256,256),
+        (D,256,512),
+        (D,256,1024),
+        (D,512,4),
+        (D,512,8),
+        (D,512,16),
+        (D,512,32),
+        (D,512,64),
+        (D,512,128),
         (D,512,256),
         (D,512,512),
-        # # (D,512,1024),
-        # # (D,1024,4),
-        # # (D,1024,8),
-        # # (D,1024,16),
-        # # (D,1024,32),
-        # # (D,1024,64),
-        # # (D,1024,128),
-        # # (D,1024,256),
-        # # (D,1024,512),
-        # # (D,1024,1024),
+        (D,512,1024),
+        (D,1024,4),
+        (D,1024,8),
+        (D,1024,16),
+        (D,1024,32),
+        (D,1024,64),
+        (D,1024,128),
+        (D,1024,256),
+        (D,1024,512),
+        (D,1024,1024),
         ]
 
     for D,L,M in SHAPES:
         print(f"Running experiment with D={D}, L={L}, M={M}")
         VARML = 9*(M.bit_length()-1-2) + (L.bit_length()-1-2) # unique L and M identifier
-        init_seed = seed + 44 + VARML
-        # init_seed = seed + 44
+        #init_seed = seed + 44 + VARML
+        init_seed = seed + 44
         params0 = init_params(random.PRNGKey(init_seed), d_in, d_out, D, L, M)
         params0 = align_tracked_particle_across_layers(params0, particle_idx=-1)
         general_kwargs = dict(X_train=X_train, Y_train=Y_train, X_test=X_test, Y_test=Y_test, 
@@ -174,23 +171,31 @@ def main():
             "stochastic_depth",
             "single_source_M",
         ]
-        loop_seed = LOOP_SEED + VARML  # NOT coupled across M and L realizations (does not change much)
-        # loop_seed = LOOP_SEED
-        print("Running GD")
-        final_params_gd, histories_gd = loop_experiment(num_repetitions, loop_seed, train_scan_ce_jit, params0, general_kwargs, ["gd"], dropout=False)
-        print("Running Dropout")
-        final_params_do, histories_do = loop_experiment(num_repetitions, loop_seed, train_dropout_scan_ce_jit, params0, kwargs_do, variants, dropout=True)
-        print("Running RAM")
-        final_params_ram, histories_ram = loop_experiment(num_repetitions, loop_seed, train_ram_scan_ce_jit, params0, kwargs_do, variants, dropout=True)
-
-        ### Save results from this run
+        #loop_seed = LOOP_SEED + VARML  # NOT coupled across M and L realizations (does not change much)
+        loop_seed = LOOP_SEED
         setting_str = f'L{L}_M{M}_D{D}' + BASE_SETTING_STR
-        save_results(
-            final_params_gd, histories_gd, 
-            final_params_do, histories_do, 
-            final_params_ram, histories_ram, 
-            setting_str, data_dir=f"{DATASET}/{mask_distribution}"
-            )
+        data_dir = f"{DATASET}/{mask_distribution}"
+
+        print("Running GD")
+        final_params_gd, histories_gd = loop_experiment(
+            num_repetitions, loop_seed, train_scan_ce_jit,
+            params0, general_kwargs, ["gd"], dropout=False
+        )
+        save_results(final_params_gd, histories_gd, "gd", setting_str, data_dir)
+
+        print("Running Dropout")
+        final_params_do, histories_do = loop_experiment(
+            num_repetitions, loop_seed, train_dropout_scan_ce_jit,
+            params0, kwargs_do, variants, dropout=True
+        )
+        save_results(final_params_do, histories_do, "do", setting_str, data_dir)
+
+        print("Running RAM")
+        final_params_ram, histories_ram = loop_experiment(
+            num_repetitions, loop_seed, train_ram_scan_ce_jit,
+            params0, kwargs_do, variants, dropout=True
+        )
+        save_results(final_params_ram, histories_ram, "ram", setting_str, data_dir)
 
 if __name__ == "__main__":
     main()        
