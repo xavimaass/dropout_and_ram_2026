@@ -7,8 +7,8 @@ from src.jax_resnet.model import init_params
 from src.jax_resnet.training import train_scan_ce_jit, train_dropout_scan_ce_jit, train_ram_scan_ce_jit
 from src.utils import align_tracked_particle_across_layers
 
-DATASET = "mnist"  # or "cifar10"
-mask_distribution = "centered_gaussian" #"rescaled_bernoulli" # Distribution for sampling the dropout mask. Options: "rescaled_bernoulli", "centered_gaussian"
+DATASET = "mnist"  # Task to solve: "mnist" or "cifar10"
+mask_distribution = "rescaled_bernoulli" # Distribution for sampling the dropout mask. Options: "rescaled_bernoulli" or "centered_gaussian"
 
 if DATASET == "mnist":
     from mnist_config import (
@@ -74,16 +74,17 @@ def save_results(final_params_gd, histories_gd, final_params_do, histories_do,
 def main():
     D = 10 if DATASET == "mnist" else 50
     SHAPES = [
-        # # (D,4,4),
-        # # (D,4,8),
-        # # (D,4,16),
-        # # (D,4,32),
-        # # (D,4,64),
-        # # (D,4,128),
-        # # (D,4,256),
-        # # (D,4,512),
-        # # (D,4,1024),
-        # # (D,8,4),
+        (D,4,4),
+        (D,4,8),
+        # UNCOMMENT TO MAKE FULL RUN:
+        # (D,4,16),
+        # (D,4,32),
+        # (D,4,64),
+        # (D,4,128),
+        # (D,4,256),
+        # (D,4,512),
+        # (D,4,1024),
+        # (D,8,4),
         # (D,8,8),
         # (D,8,16),
         # (D,8,32),
@@ -91,8 +92,8 @@ def main():
         # (D,8,128),
         # (D,8,256),
         # (D,8,512),
-        # # (D,8,1024),
-        # # (D,16,4),
+        # (D,8,1024),
+        # (D,16,4),
         # (D,16,8),
         # (D,16,16),
         # (D,16,32),
@@ -100,8 +101,8 @@ def main():
         # (D,16,128),
         # (D,16,256),
         # (D,16,512),
-        # # (D,16,1024),
-        # # (D,32,4),
+        # (D,16,1024),
+        # (D,32,4),
         # (D,32,8),
         # (D,32,16),
         # (D,32,32),
@@ -109,8 +110,8 @@ def main():
         # (D,32,128),
         # (D,32,256),
         # (D,32,512),
-        # # (D,32,1024),
-        # # (D,64,4),
+        # (D,32,1024),
+        # (D,64,4),
         # (D,64,8),
         # (D,64,16),
         # (D,64,32),
@@ -118,8 +119,8 @@ def main():
         # (D,64,128),
         # (D,64,256),
         # (D,64,512),
-        # # (D,64,1024),
-        # # (D,128,4),
+        # (D,64,1024),
+        # (D,128,4),
         # (D,128,8),
         # (D,128,16),
         # (D,128,32),
@@ -127,8 +128,8 @@ def main():
         # (D,128,128),
         # (D,128,256),
         # (D,128,512),
-        # # (D,128,1024),
-        # # (D,256,4),
+        # (D,128,1024),
+        # (D,256,4),
         # (D,256,8),
         # (D,256,16),
         # (D,256,32),
@@ -136,32 +137,32 @@ def main():
         # (D,256,128),
         # (D,256,256),
         # (D,256,512),
-        # # (D,256,1024),
-        # # (D,512,4),
+        # (D,256,1024),
+        # (D,512,4),
         # (D,512,8),
         # (D,512,16),
         # (D,512,32),
         # (D,512,64),
         # (D,512,128),
-        (D,512,256),
-        (D,512,512),
-        # # (D,512,1024),
-        # # (D,1024,4),
-        # # (D,1024,8),
-        # # (D,1024,16),
-        # # (D,1024,32),
-        # # (D,1024,64),
-        # # (D,1024,128),
-        # # (D,1024,256),
-        # # (D,1024,512),
-        # # (D,1024,1024),
+        # (D,512,256),
+        # (D,512,512),
+        # (D,512,1024),
+        # (D,1024,4),
+        # (D,1024,8),
+        # (D,1024,16),
+        # (D,1024,32),
+        # (D,1024,64),
+        # (D,1024,128),
+        # (D,1024,256),
+        # (D,1024,512),
+        # (D,1024,1024),
         ]
 
     for D,L,M in SHAPES:
         print(f"Running experiment with D={D}, L={L}, M={M}")
         VARML = 9*(M.bit_length()-1-2) + (L.bit_length()-1-2) # unique L and M identifier
-        init_seed = seed + 44 + VARML
-        # init_seed = seed + 44
+        # init_seed = seed + 44 + VARML # make initialization different for each L and M (requires more repetitions to get good estimates)
+        init_seed = seed + 44
         params0 = init_params(random.PRNGKey(init_seed), d_in, d_out, D, L, M)
         params0 = align_tracked_particle_across_layers(params0, particle_idx=-1)
         general_kwargs = dict(X_train=X_train, Y_train=Y_train, X_test=X_test, Y_test=Y_test, 
@@ -174,8 +175,8 @@ def main():
             "stochastic_depth",
             "single_source_M",
         ]
-        loop_seed = LOOP_SEED + VARML  # NOT coupled across M and L realizations (does not change much)
-        # loop_seed = LOOP_SEED
+        # loop_seed = LOOP_SEED + VARML  # use different seeds for each M and L realizations (does not change the behaviour much)
+        loop_seed = LOOP_SEED
         print("Running GD")
         final_params_gd, histories_gd = loop_experiment(num_repetitions, loop_seed, train_scan_ce_jit, params0, general_kwargs, ["gd"], dropout=False)
         print("Running Dropout")
@@ -185,6 +186,7 @@ def main():
 
         ### Save results from this run
         setting_str = f'L{L}_M{M}_D{D}' + BASE_SETTING_STR
+        ### BEWARE: We write the entire resulting network parameters to disk (which can be large).
         save_results(
             final_params_gd, histories_gd, 
             final_params_do, histories_do, 
